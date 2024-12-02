@@ -27,7 +27,7 @@ ConVar g_cvarSurvivorLimit = null;  // Cvar for the survivor team size (for both
 // Trie for storing player teams by their SteamID
 Handle g_hTeamStorage = INVALID_HANDLE;
 
-Handle g_hRestorePlayerTeamTimer = INVALID_HANDLE;
+Handle g_hRestorePlayerTeamTimer = null;
 
 /**
  * Called before OnPluginStart.
@@ -68,9 +68,8 @@ public void Event_RoundStart(Event event, const char[] szEventName, bool bDontBr
         return;
     }
 
-    if (g_hRestorePlayerTeamTimer != INVALID_HANDLE) {
-        CloseHandle(g_hRestorePlayerTeamTimer);
-        g_hRestorePlayerTeamTimer = INVALID_HANDLE;
+    if (g_hRestorePlayerTeamTimer != null) {
+        delete g_hRestorePlayerTeamTimer;
     }
 
     if (!InSecondHalfOfRound()) {
@@ -82,7 +81,7 @@ public Action Timer_RestorePlayerTeam(Handle timer)
 {
     if (!IsAnyPlayerLoading()) {
         ClearTrie(g_hTeamStorage); // Clean up the trie when no players are loading
-        g_hRestorePlayerTeamTimer = INVALID_HANDLE;
+        delete g_hRestorePlayerTeamTimer;
         return Plugin_Stop;
     }
 
@@ -186,18 +185,11 @@ int MoveExcessPlayerToSpectator(int iTeam) {
 }
 
 /**
- * Saves the teams at the end of the map.
- * This function is called when the map ends.
- */
-public void OnMapEnd() {
-    SaveTeams();
-}
-
-/**
  * Saves the teams of all players in the Trie.
  * It stores the team of each player if they are on an active team.
  */
-void SaveTeams() {
+public void L4D2_OnEndVersusModeRound_Post()
+{
     ClearTrie(g_hTeamStorage); // Clear previous data before saving new ones
 
     int iFirstTeam = AreTeamsFlipped() == InSecondHalfOfRound() ? 1 : 0;
@@ -221,7 +213,7 @@ void SaveTeams() {
         if (IsPlayerTeam(iTeam)) {
             SetTrieValue(g_hTeamStorage, szSteamId, bFlipTeam ? (iTeam == TEAM_SURVIVORS ? TEAM_INFECTED : TEAM_SURVIVORS) : iTeam);
         } else {
-            SetTrieValue(g_hTeamStorage, szSteamId, TEAM_SURVIVORS);
+            SetTrieValue(g_hTeamStorage, szSteamId, TEAM_SPECTATOR);
         }
     }
 }
