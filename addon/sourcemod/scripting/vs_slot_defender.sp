@@ -185,19 +185,11 @@ int MoveExcessPlayerToSpectator(int iTeam) {
 }
 
 /**
- * Saves the teams at the end of the map.
- * This function is called when the second round end.
- */
-public void L4D2_OnEndVersusModeRound_Post()
-{
-    SaveTeams();
-}
-
-/**
  * Saves the teams of all players in the Trie.
  * It stores the team of each player if they are on an active team.
  */
-void SaveTeams() {
+public void L4D2_OnEndVersusModeRound_Post()
+{
     ClearTrie(g_hTeamStorage); // Clear previous data before saving new ones
 
     int iFirstTeam = AreTeamsFlipped() == InSecondHalfOfRound() ? 1 : 0;
@@ -221,7 +213,7 @@ void SaveTeams() {
         if (IsPlayerTeam(iTeam)) {
             SetTrieValue(g_hTeamStorage, szSteamId, bFlipTeam ? (iTeam == TEAM_SURVIVORS ? TEAM_INFECTED : TEAM_SURVIVORS) : iTeam);
         } else {
-            SetTrieValue(g_hTeamStorage, szSteamId, TEAM_SURVIVORS);
+            SetTrieValue(g_hTeamStorage, szSteamId, TEAM_SPECTATOR);
         }
     }
 }
