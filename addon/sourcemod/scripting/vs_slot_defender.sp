@@ -10,7 +10,7 @@ public Plugin myinfo = {
     name        = "VsSlotDefender",
     author      = "TouchMe",
     description = "",
-    version     = "build0001",
+    version     = "build0002",
     url         = "https://github.com/TouchMe-Inc/l4d2_vs_slot_defender"
 };
 
@@ -26,8 +26,6 @@ ConVar g_cvarSurvivorLimit = null;  // Cvar for the survivor team size (for both
 
 // Trie for storing player teams by their SteamID
 Handle g_hTeamStorage = INVALID_HANDLE;
-
-Handle g_hRestorePlayerTeamTimer = null;
 
 /**
  * Called before OnPluginStart.
@@ -48,7 +46,8 @@ public APLRes AskPluginLoad2(Handle myself, bool bLate, char[] sErr, int iErrLen
  * Plugin initialization.
  * This function is called when the plugin starts and sets up event hooks.
  */
-public void OnPluginStart() {
+public void OnPluginStart()
+{
     // Create a Trie to store player team information
     g_hTeamStorage = CreateTrie();
 
@@ -64,24 +63,16 @@ public void OnPluginStart() {
 
 public void Event_RoundStart(Event event, const char[] szEventName, bool bDontBroadcast)
 {
-    if (IsNewGame()) {
-        return;
-    }
-
-    if (g_hRestorePlayerTeamTimer != null) {
-        delete g_hRestorePlayerTeamTimer;
-    }
-
     if (!InSecondHalfOfRound()) {
-        g_hRestorePlayerTeamTimer = CreateTimer(1.0, Timer_RestorePlayerTeam, .flags = TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+        CreateTimer(1.0, Timer_RestorePlayerTeam, .flags = TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     }
 }
 
 public Action Timer_RestorePlayerTeam(Handle timer)
 {
-    if (!IsAnyPlayerLoading()) {
+    if (!IsAnyPlayerLoading())
+    {
         ClearTrie(g_hTeamStorage); // Clean up the trie when no players are loading
-        delete g_hRestorePlayerTeamTimer;
         return Plugin_Stop;
     }
 
@@ -92,7 +83,8 @@ public Action Timer_RestorePlayerTeam(Handle timer)
  * Handles the player team change event.
  * This is triggered when a player changes teams. It requests restoring their previous team.
  */
-public void Event_PlayerTeam(Event event, const char[] szEventName, bool bDontBroadcast) {
+public void Event_PlayerTeam(Event event, const char[] szEventName, bool bDontBroadcast)
+{
     int iClient = GetClientOfUserId(GetEventInt(event, "userid"));
 
     // Check to exclude invalid or non-existing clients, as well as fake clients
@@ -115,7 +107,8 @@ public void Event_PlayerTeam(Event event, const char[] szEventName, bool bDontBr
  *
  * @param iClient The client ID for whom the team is being restored.
  */
-public void RestorePlayerTeam(int iClient) {
+public void RestorePlayerTeam(int iClient)
+{
     if (!IsClientInGame(iClient)) return;
 
     char szSteamId[32];
@@ -165,7 +158,8 @@ bool IsTeamFull(int iTeam)
  *
  * @param iTeam The team to check for excess players.
  */
-int MoveExcessPlayerToSpectator(int iTeam) {
+int MoveExcessPlayerToSpectator(int iTeam)
+{
     // Iterate through all players and find the excess one
     for (int i = 1; i <= MaxClients; i++) {
         if (!IsClientInGame(i) || GetClientTeam(i) != iTeam) continue;
@@ -190,21 +184,29 @@ int MoveExcessPlayerToSpectator(int iTeam) {
  */
 public void L4D2_OnEndVersusModeRound_Post()
 {
+    if (!InSecondHalfOfRound()) {
+        return;
+    }
+
     ClearTrie(g_hTeamStorage); // Clear previous data before saving new ones
 
-    int iFirstTeam = AreTeamsFlipped() == InSecondHalfOfRound() ? 1 : 0;
-    int iSecondTeam = 1 - iFirstTeam;
+    int iFirstTeam = AreTeamsFlipped() == true ? 2 : 1;
+    int iSecondTeam = iFirstTeam == 1 ? 2 : 1;
 
     int iFirstTeamScore = L4D_GetTeamScore(iFirstTeam);
     int iSecondTeamScore = L4D_GetTeamScore(iSecondTeam);
 
     bool bFlipTeam = iFirstTeamScore < iSecondTeamScore;
 
-    // Save the team for each player
-    for (int iClient = 1; iClient <= MaxClients; iClient ++) {
-        if (!IsClientInGame(iClient)) continue;
 
-        char szSteamId[32];
+
+    // Save the team for each player
+    char szSteamId[32];
+
+    for (int iClient = 1; iClient <= MaxClients; iClient ++)
+    {
+        if (!IsClientInGame(iClient) || IsFakeClient(iClient)) continue;
+
         GetClientAuthId(iClient, AuthId_Steam2, szSteamId, sizeof(szSteamId));
 
         int iTeam = GetClientTeam(iClient);
@@ -229,16 +231,6 @@ public void L4D2_OnEndVersusModeRound_Post()
 
 bool IsPlayerTeam(int iTeam) {
     return iTeam == TEAM_SURVIVORS || iTeam == TEAM_INFECTED;
-}
-
-/**
- * Checks if the current game is on the first round of the first map.
- * This checks if both teams have a score of 0.
- *
- * @return true if it is the first round on the first map, false otherwise.
- */
-bool IsNewGame() {
-    return (L4D_GetTeamScore(0) == 0 && L4D_GetTeamScore(1) == 0);
 }
 
 /**
