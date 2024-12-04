@@ -21,6 +21,12 @@ public Plugin myinfo = {
 #define TEAM_SURVIVORS     2
 #define TEAM_INFECTED      3
 
+/*
+ * Game rule team.
+ */
+#define TEAM_A                  0
+#define TEAM_B                  1
+
 /**
  * Sugar.
  */
@@ -200,13 +206,13 @@ public void L4D2_OnEndVersusModeRound_Post()
 
     ClearTrie(g_hTeamStorage); // Clear previous data before saving new ones
 
-    int iSurvivalTeam = AreTeamsFlipped() ? 1 : 0;
-    int iInfectedTeam = AreTeamsFlipped() ? 0 : 1;
+    int iSurvivalTeam = AreTeamsFlipped() ? TEAM_B : TEAM_A;
+    int iInfectedTeam = iSurvivalTeam == TEAM_A ? TEAM_B : TEAM_A;
 
     int iSurvivalScore = L4D2Direct_GetVSCampaignScore(iSurvivalTeam);
     int iInfectedScore = L4D2Direct_GetVSCampaignScore(iInfectedTeam);
 
-    bool bFlipTeam = iInfectedScore < iSurvivalScore;
+    bool bSurvivorTeamWin = iInfectedScore < iSurvivalScore;
 
     // Save the team for each player
     char szSteamId[32];
@@ -221,7 +227,7 @@ public void L4D2_OnEndVersusModeRound_Post()
 
         // Save only active teams (survivors and infected)
         if (IsPlayerTeam(iTeam)) {
-            SetTrieValue(g_hTeamStorage, szSteamId, bFlipTeam ? (iTeam == TEAM_SURVIVORS ? TEAM_SURVIVORS : TEAM_INFECTED) : iTeam);
+            SetTrieValue(g_hTeamStorage, szSteamId, bSurvivorTeamWin ? iTeam : (iTeam == TEAM_INFECTED ? TEAM_SURVIVORS : TEAM_INFECTED));
         } else {
             SetTrieValue(g_hTeamStorage, szSteamId, TEAM_SPECTATOR);
         }
