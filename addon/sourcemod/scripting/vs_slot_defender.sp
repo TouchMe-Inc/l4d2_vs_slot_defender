@@ -9,8 +9,8 @@
 public Plugin myinfo = {
     name        = "VsSlotDefender",
     author      = "TouchMe",
-    description = "",
-    version     = "build0002",
+    description = "The plugin should save player teams between map changes",
+    version     = "build0003",
     url         = "https://github.com/TouchMe-Inc/l4d2_vs_slot_defender"
 };
 
@@ -64,11 +64,11 @@ public void OnPluginStart()
 public void Event_RoundStart(Event event, const char[] szEventName, bool bDontBroadcast)
 {
     if (!InSecondHalfOfRound()) {
-        CreateTimer(1.0, Timer_RestorePlayerTeam, .flags = TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+        CreateTimer(1.0, Timer_ClearTeamStorage, .flags = TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     }
 }
 
-public Action Timer_RestorePlayerTeam(Handle timer)
+public Action Timer_ClearTeamStorage(Handle timer)
 {
     if (!IsAnyPlayerLoading())
     {
@@ -97,7 +97,7 @@ public void Event_PlayerTeam(Event event, const char[] szEventName, bool bDontBr
     }
 
     // Restore the player's team in the next frame
-    RequestFrame(RestorePlayerTeam, iClient);
+    CreateTimer(0.1, Timer_RestorePlayerTeam, iClient, .flags = TIMER_FLAG_NO_MAPCHANGE);
 }
 
 /**
@@ -107,9 +107,9 @@ public void Event_PlayerTeam(Event event, const char[] szEventName, bool bDontBr
  *
  * @param iClient The client ID for whom the team is being restored.
  */
-public void RestorePlayerTeam(int iClient)
+Action Timer_RestorePlayerTeam(Handle hTimer, int iClient)
 {
-    if (!IsClientInGame(iClient)) return;
+    if (!IsClientInGame(iClient)) return Plugin_Stop;
 
     char szSteamId[32];
     GetClientAuthId(iClient, AuthId_Steam2, szSteamId, sizeof(szSteamId));
@@ -117,11 +117,11 @@ public void RestorePlayerTeam(int iClient)
     int iSavedTeam;
     // Check if the player's team is saved
     if (!GetTrieValue(g_hTeamStorage, szSteamId, iSavedTeam)) {
-        return;
+        return Plugin_Stop;
     }
 
     if (GetClientTeam(iClient) == iSavedTeam) {
-        return;
+        return Plugin_Stop;
     }
 
     if (IsPlayerTeam(iSavedTeam) && IsTeamFull(iSavedTeam)) {
@@ -129,6 +129,8 @@ public void RestorePlayerTeam(int iClient)
     }
 
     ChangeClientTeam(iClient, iSavedTeam);
+
+    return Plugin_Stop;
 }
 
 /**
@@ -190,15 +192,13 @@ public void L4D2_OnEndVersusModeRound_Post()
 
     ClearTrie(g_hTeamStorage); // Clear previous data before saving new ones
 
-    int iFirstTeam = AreTeamsFlipped() == true ? 2 : 1;
-    int iSecondTeam = iFirstTeam == 1 ? 2 : 1;
+    int iSurvivalTeam = AreTeamsFlipped() ? 1 : 0;
+    int iInfectedTeam = AreTeamsFlipped() ? 0 : 1;
 
-    int iFirstTeamScore = L4D_GetTeamScore(iFirstTeam);
-    int iSecondTeamScore = L4D_GetTeamScore(iSecondTeam);
+    int iSurvivalScore = L4D_GetTeamScore(iSurvivalTeam);
+    int iInfectedScore = L4D_GetTeamScore(iInfectedTeam);
 
-    bool bFlipTeam = iFirstTeamScore < iSecondTeamScore;
-
-
+    bool bFlipTeam = iInfectedScore < iSurvivalScore;
 
     // Save the team for each player
     char szSteamId[32];
