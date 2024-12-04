@@ -10,7 +10,7 @@ public Plugin myinfo = {
     name        = "VsSlotDefender",
     author      = "TouchMe",
     description = "The plugin should save player teams between map changes",
-    version     = "build0003",
+    version     = "build0004",
     url         = "https://github.com/TouchMe-Inc/l4d2_vs_slot_defender"
 };
 
@@ -21,11 +21,18 @@ public Plugin myinfo = {
 #define TEAM_SURVIVORS     2
 #define TEAM_INFECTED      3
 
+/**
+ * Sugar.
+ */
+#define SetHumanSpec            L4D_SetHumanSpec
+#define TakeOverBot             L4D_TakeOverBot
+
 // Configurable cvar for managing the survivor team size
 ConVar g_cvarSurvivorLimit = null;  // Cvar for the survivor team size (for both teams)
 
 // Trie for storing player teams by their SteamID
 Handle g_hTeamStorage = INVALID_HANDLE;
+
 
 /**
  * Called before OnPluginStart.
@@ -128,7 +135,7 @@ Action Timer_RestorePlayerTeam(Handle hTimer, int iClient)
         MoveExcessPlayerToSpectator(iSavedTeam);
     }
 
-    ChangeClientTeam(iClient, iSavedTeam);
+    SetupClientTeam(iClient, iSavedTeam);
 
     return Plugin_Stop;
 }
@@ -146,7 +153,7 @@ bool IsTeamFull(int iTeam)
 
     // Count how many players are in the given team
     for (int i = 1; i <= MaxClients; i++) {
-        if (IsClientInGame(i) && GetClientTeam(i) == iTeam) {
+        if (IsClientInGame(i) && !IsFakeClient(i) && GetClientTeam(i) == iTeam) {
             iCount++;
         }
     }
@@ -163,16 +170,17 @@ bool IsTeamFull(int iTeam)
 int MoveExcessPlayerToSpectator(int iTeam)
 {
     // Iterate through all players and find the excess one
-    for (int i = 1; i <= MaxClients; i++) {
-        if (!IsClientInGame(i) || GetClientTeam(i) != iTeam) continue;
+    char szSteamId[32];
 
-        char szSteamId[32];
+    for (int i = 1; i <= MaxClients; i++) {
+        if (!IsClientInGame(i) || IsFakeClient(i) || GetClientTeam(i) != iTeam) continue;
+
         GetClientAuthId(i, AuthId_Steam2, szSteamId, sizeof(szSteamId));
 
         int iSavedTeam;
         // Check if the player's team is saved
         if (!GetTrieValue(g_hTeamStorage, szSteamId, iSavedTeam) || iSavedTeam != iTeam) {
-            ChangeClientTeam(i, TEAM_SPECTATOR);
+            SetupClientTeam(i, TEAM_SPECTATOR);
             return i;
         }
     }
@@ -195,8 +203,8 @@ public void L4D2_OnEndVersusModeRound_Post()
     int iSurvivalTeam = AreTeamsFlipped() ? 1 : 0;
     int iInfectedTeam = AreTeamsFlipped() ? 0 : 1;
 
-    int iSurvivalScore = L4D_GetTeamScore(iSurvivalTeam);
-    int iInfectedScore = L4D_GetTeamScore(iInfectedTeam);
+    int iSurvivalScore = L4D2Direct_GetVSCampaignScore(iSurvivalTeam);
+    int iInfectedScore = L4D2Direct_GetVSCampaignScore(iInfectedTeam);
 
     bool bFlipTeam = iInfectedScore < iSurvivalScore;
 
@@ -213,7 +221,7 @@ public void L4D2_OnEndVersusModeRound_Post()
 
         // Save only active teams (survivors and infected)
         if (IsPlayerTeam(iTeam)) {
-            SetTrieValue(g_hTeamStorage, szSteamId, bFlipTeam ? (iTeam == TEAM_SURVIVORS ? TEAM_INFECTED : TEAM_SURVIVORS) : iTeam);
+            SetTrieValue(g_hTeamStorage, szSteamId, bFlipTeam ? (iTeam == TEAM_SURVIVORS ? TEAM_SURVIVORS : TEAM_INFECTED) : iTeam);
         } else {
             SetTrieValue(g_hTeamStorage, szSteamId, TEAM_SPECTATOR);
         }
@@ -266,4 +274,64 @@ bool IsAnyPlayerLoading()
     }
 
     return false;
+}
+
+/**
+ * Sets the client team.
+ *
+ * @param iClient           Client index.
+ * @param iTeam             Client team.
+ * @return                  Returns true if success.
+ */
+bool SetupClientTeam(int iClient, int iTeam)
+{
+	if (GetClientTeam(iClient) == iTeam) {
+		return true;
+	}
+
+	if (iTeam == TEAM_INFECTED || iTeam == TEAM_SPECTATOR)
+	{
+		ChangeClientTeam(iClient, iTeam);
+		return true;
+	}
+
+	int iBot = FindSurvivorBot();
+	if (iTeam == TEAM_SURVIVORS && iBot != -1)
+	{
+		ChangeClientTeam(iClient, TEAM_NONE);
+		SetHumanSpec(iBot, iClient);
+		TakeOverBot(iClient);
+
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * Finds a free bot.
+ *
+ * @return                  Bot index, otherwise -1.
+ */
+int FindSurvivorBot()
+{
+	for (int iClient = 1; iClient <= MaxClients; iClient++)
+	{
+		if (!IsClientInGame(iClient)
+		|| !IsFakeClient(iClient)
+		|| !IsClientSurvivor(iClient)) {
+			continue;
+		}
+
+		return iClient;
+	}
+
+	return -1;
+}
+
+/**
+ * Survivor team player?
+ */
+bool IsClientSurvivor(int iClient) {
+	return (GetClientTeam(iClient) == TEAM_SURVIVORS);
 }
