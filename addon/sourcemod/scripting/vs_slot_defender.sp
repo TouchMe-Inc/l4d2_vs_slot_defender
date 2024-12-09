@@ -33,9 +33,10 @@ public Plugin myinfo = {
 #define GetVSCampaignScore      L4D2Direct_GetVSCampaignScore
 #define SetHumanSpec            L4D_SetHumanSpec
 #define TakeOverBot             L4D_TakeOverBot
+#define OnEndVersusModeRound_Post L4D2_OnEndVersusModeRound_Post
 
 
-bool g_bRoundIsLive = false;
+bool g_bBlockTeamChange = false;
 
 // Configurable cvar for managing the survivor team size
 ConVar g_cvSurvivorLimit = null;  // Cvar for the survivor team size (for both teams)
@@ -81,11 +82,19 @@ public void OnPluginStart()
     AddCommandListener(Listener_OnPlayerJoinTeam, "jointeam");
 }
 
+public void OnMapInit(const char[] map) {
+    g_bBlockTeamChange = false;
+}
+
 /**
  * Blocking a team change if there is a mix of teams now.
  */
 Action Listener_OnPlayerJoinTeam(int iClient, const char[] sCmd, int iArgs)
 {
+    if (g_bBlockTeamChange) {
+        return Plugin_Continue;
+    }
+
     if (!GetTrieSize(g_hTeamStorage)) {
         return Plugin_Continue;
     }
@@ -93,7 +102,7 @@ Action Listener_OnPlayerJoinTeam(int iClient, const char[] sCmd, int iArgs)
     char szSteamId[32];
     GetClientAuthId(iClient, AuthId_Steam2, szSteamId, sizeof(szSteamId));
 
-    int iSavedTeam;
+    int iSavedTeam = TEAM_SPECTATOR;
     // Check if the player's team is saved
     if (!GetTrieValue(g_hTeamStorage, szSteamId, iSavedTeam)) {
         return Plugin_Continue;
@@ -104,8 +113,6 @@ Action Listener_OnPlayerJoinTeam(int iClient, const char[] sCmd, int iArgs)
 
 void Event_RoundStart(Event event, const char[] szEventName, bool bDontBroadcast)
 {
-    g_bRoundIsLive = true;
-
     if (!InSecondHalfOfRound()) {
         CreateTimer(1.0, Timer_ClearTeamStorage, .flags = TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     }
@@ -128,6 +135,10 @@ Action Timer_ClearTeamStorage(Handle timer)
  */
 void Event_PlayerTeam(Event event, const char[] szEventName, bool bDontBroadcast)
 {
+    if (g_bBlockTeamChange) {
+        return;
+    }
+
     int iClient = GetClientOfUserId(GetEventInt(event, "userid"));
 
     // Check to exclude invalid or non-existing clients, as well as fake clients
@@ -135,15 +146,10 @@ void Event_PlayerTeam(Event event, const char[] szEventName, bool bDontBroadcast
         return;
     }
 
-    if (!g_bRoundIsLive) {
-        return;
-    }
-
     if (!GetTrieSize(g_hTeamStorage)) {
         return;
     }
 
-    // Restore the player's team in the next frame
     CreateTimer(0.05, Timer_RestorePlayerTeam, iClient, .flags = TIMER_FLAG_NO_MAPCHANGE);
 }
 
@@ -161,7 +167,7 @@ Action Timer_RestorePlayerTeam(Handle hTimer, int iClient)
     char szSteamId[32];
     GetClientAuthId(iClient, AuthId_Steam2, szSteamId, sizeof(szSteamId));
 
-    int iSavedTeam;
+    int iSavedTeam = TEAM_SPECTATOR;
     // Check if the player's team is saved
     if (!GetTrieValue(g_hTeamStorage, szSteamId, iSavedTeam)) {
         return Plugin_Stop;
@@ -232,13 +238,13 @@ int MoveExcessPlayerToSpectator(int iTeam)
  * Saves the teams of all players in the Trie.
  * It stores the team of each player if they are on an active team.
  */
-public void L4D2_OnEndVersusModeRound_Post()
+public void OnEndVersusModeRound_Post()
 {
-    g_bRoundIsLive = false;
-
     if (!InSecondHalfOfRound()) {
         return;
     }
+
+    g_bBlockTeamChange = true;
 
     ClearTrie(g_hTeamStorage); // Clear previous data before saving new ones
 

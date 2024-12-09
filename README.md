@@ -1,1 +1,2 @@
-# l4d2_vs_slot_defender
+# About vs_slot_defender
+The plugin should save player teams between map changes.
