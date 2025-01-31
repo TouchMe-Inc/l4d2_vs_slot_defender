@@ -33,6 +33,7 @@ public Plugin myinfo = {
 #define GetVSCampaignScore      L4D2Direct_GetVSCampaignScore
 #define SetHumanSpec            L4D_SetHumanSpec
 #define TakeOverBot             L4D_TakeOverBot
+#define OnEndVersusModeRound_Post L4D2_OnEndVersusModeRound_Post
 
 
 bool g_bBlockTeamChange = false;
@@ -101,7 +102,7 @@ Action Listener_OnPlayerJoinTeam(int iClient, const char[] sCmd, int iArgs)
     char szSteamId[32];
     GetClientAuthId(iClient, AuthId_Steam2, szSteamId, sizeof(szSteamId));
 
-    int iSavedTeam;
+    int iSavedTeam = TEAM_SPECTATOR;
     // Check if the player's team is saved
     if (!GetTrieValue(g_hTeamStorage, szSteamId, iSavedTeam)) {
         return Plugin_Continue;
@@ -115,7 +116,6 @@ void Event_RoundStart(Event event, const char[] szEventName, bool bDontBroadcast
     if (!InSecondHalfOfRound()) {
         CreateTimer(1.0, Timer_ClearTeamStorage, .flags = TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     }
-
 }
 
 Action Timer_ClearTeamStorage(Handle timer)
@@ -150,7 +150,6 @@ void Event_PlayerTeam(Event event, const char[] szEventName, bool bDontBroadcast
         return;
     }
 
-    // Restore the player's team in the next frame
     CreateTimer(0.05, Timer_RestorePlayerTeam, iClient, .flags = TIMER_FLAG_NO_MAPCHANGE);
 }
 
@@ -168,7 +167,7 @@ Action Timer_RestorePlayerTeam(Handle hTimer, int iClient)
     char szSteamId[32];
     GetClientAuthId(iClient, AuthId_Steam2, szSteamId, sizeof(szSteamId));
 
-    int iSavedTeam;
+    int iSavedTeam = TEAM_SPECTATOR;
     // Check if the player's team is saved
     if (!GetTrieValue(g_hTeamStorage, szSteamId, iSavedTeam)) {
         return Plugin_Stop;
@@ -239,7 +238,7 @@ int MoveExcessPlayerToSpectator(int iTeam)
  * Saves the teams of all players in the Trie.
  * It stores the team of each player if they are on an active team.
  */
-public void L4D2_OnEndVersusModeRound_Post()
+public void OnEndVersusModeRound_Post()
 {
     if (!InSecondHalfOfRound()) {
         return;
